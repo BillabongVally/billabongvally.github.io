@@ -170,8 +170,6 @@ body[data-mood="combat"] #artwrap { height: 118px; }
 .rollbtn:hover:not(:disabled) { border-color: var(--red); box-shadow: 0 0 24px rgba(196,67,47,.45); }
 .cancelbtn { display: block; margin: 8px auto 0; background: none; border: 0; color: var(--dim); font-style: italic; font-size: 15px; }
 .die-anim { font-family: var(--display); font-size: 42px; color: var(--brass); margin-top: 6px; }
-.die-anim.landed { color: var(--ink); text-shadow: 0 0 14px rgba(196,67,47,.55); }
-.die-keep { font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--dim); }
 
 /* the sheet */
 .sheet-empty { color: var(--dim); font-style: italic; }
@@ -427,6 +425,29 @@ H.wpick = (list) => {
   }
   return list[list.length - 1][1];
 };
+
+/* Descriptors (H.WORDS in data.js). H.w('dark') picks one entry, skipping the ones it handed out
+   most recently for that list so nothing comes back twice in a row. Dotted keys reach nested
+   lists: H.w('kill.normal'). Returns '' for an unknown key. */
+H._wRecent = {};
+H.w = (key) => {
+  const list = key.split('.').reduce((o, k) => (o ? o[k] : null), H.WORDS);
+  if (!Array.isArray(list) || !list.length) return '';
+  const recent = H._wRecent[key] || (H._wRecent[key] = []);
+  const fresh = list.filter((x) => !recent.includes(x));
+  const v = H.pick(fresh.length ? fresh : list);
+  recent.push(v);
+  while (recent.length > Math.floor(list.length / 2)) recent.shift();
+  return v;
+};
+/* Fill {slots} in a line from H.WORDS: 'The {dark} water' → 'The inky water'.
+   {Dark} capitalizes the pick. Slots that aren't descriptor lists are left alone. */
+H.fill = (s) =>
+  String(s).replace(/\{([\w.]+)\}/g, (m, k) => {
+    const lk = k.charAt(0).toLowerCase() + k.slice(1);
+    const v = H.w(lk);
+    return v ? (k === lk ? v : H.cap(v)) : m;
+  });
 
 /* Seeded generator (mulberry32) — used for art so a scene draws the same each time. */
 H.seeded = (seed) => {
@@ -867,6 +888,109 @@ H.T.looterRoutines = [
   'going through a dead man\'s pack, item by item',
 ];
 
+/* ---------------------------------------------------------------------
+   Descriptors — interchangeable words and phrases so the same moment
+   doesn't read the same way twice.
+     In code:        H.w('rotten')               → 'worm-eaten'
+     Inside a line:  H.fill('The {dark} water.')  → 'The inky water.'   ({Dark} capitalizes)
+   Every entry in a list must fit the same slot in a sentence, so any
+   one can stand in for another. Add to them freely.
+   --------------------------------------------------------------------- */
+H.WORDS = {
+  /* --- adjectives: go before a noun ("the {rotten} boards") --- */
+  dark: ['black', 'pitch-black', 'inky', 'lightless', 'murky', 'shadowed', 'tar-black'],
+  wet: ['sodden', 'dripping', 'waterlogged', 'slick', 'mud-caked', 'rain-soaked'],
+  rotten: ['rotten', 'rotted', 'mouldering', 'worm-eaten', 'sagging', 'crumbling', 'mildewed'],
+  old: ['weathered', 'warped', 'sun-bleached', 'moss-furred', 'rust-eaten', 'long-abandoned', 'half-collapsed'],
+  wrong: ['unnatural', 'uncanny', 'ungodly', 'unholy', 'misshapen', 'sickly', 'corrupted'],
+  quiet: ['silent', 'still', 'hushed', 'breathless', 'deathly still', 'soundless'],
+  grim: ['grim', 'bleak', 'godforsaken', 'desolate', 'forsaken', 'cheerless', 'miserable'],
+
+  /* --- nouns: "It smells of {smell}." / "You hear {sound}." --- */
+  smell: ['rot', 'stagnant water', 'wet ash', 'old blood', 'lamp oil', 'swamp gas', 'something sweet and spoiled', 'mildew', 'burnt hair'],
+  sound: ['a slow drip', 'old boards creaking', 'a wet, ragged breath', 'something shifting in the reeds', 'flies, thick and droning', 'a low moan, far off', 'chain clinking somewhere', 'water lapping at the pilings'],
+
+  /* --- whole sentences: a line of atmosphere on entering a place --- */
+  ambient: [
+    'The air smells of {smell}.',
+    'Somewhere close: {sound}.',
+    'Water drips from everything.',
+    'Mosquitoes find you at once.',
+    'Your boots sink an inch with every step.',
+    'Something has been through here recently. The mud says so.',
+    'The {quiet} air presses on your ears.',
+    'A cottonmouth slides away from your boot and is gone.',
+    'You catch yourself holding your breath.',
+    'Flies lift off something you decide not to look at.',
+    'The light here is thin and grey, and makes everything look drowned.',
+  ],
+  dread: ['Your skin crawls.', 'The hair on your neck stands up.', 'Your mouth has gone dry.', 'Your hand finds your weapon without being told.', 'Every instinct says turn around.', 'You feel watched.'],
+
+  /* --- travel: "Four hours {travelBy}, through {travelThrough}." --- */
+  travelBy: ['on foot and by borrowed pirogue', 'on foot, and once waist-deep', 'by mule track and plank bridge', 'by skiff and then by mud', 'poling a leaky pirogue'],
+  travelThrough: ['cane and cypress and black water', 'sawgrass and sucking mud', 'moss-hung oaks and drowned fields', 'flooded cane and dead palmetto', 'fog and still channels', 'clouds of mosquitoes and ankle-deep water'],
+
+  /* --- searching: "under {hidingPlace}" --- */
+  hidingPlace: ['a fallen beam', 'a tarpaulin gone green', 'a pile of rotted sacking', 'the floorboards', 'a collapsed shelf', 'an overturned barrel', 'a heap of sodden newspaper'],
+
+  /* --- creatures --- */
+  restless: ['restless', 'twitching at every sound', 'sniffing the air', 'swaying, head cocked', 'agitated'],
+  restlessMany: ['restless, heads turning', 'sniffing the air', 'twitching at every sound', 'milling, agitated', 'stirred up and spoiling for something'],
+  emerge: ['lurches out of the dark', 'staggers out of the reeds', 'shambles in from the treeline', 'comes crashing through the cane', 'rises out of the shallows', 'stumbles into view'],
+
+  /* --- combat: your movement ("You {advance} 6 m toward…" / "You {retreat} 6 m.") --- */
+  advance: ['advance', 'push forward', 'press forward', 'edge forward', 'slog forward', 'stalk forward', 'move up'],
+  retreat: ['fall back', 'back off', 'pull back', 'backpedal', 'edge back', 'retreat'],
+
+  /* --- combat: your misses ("miss — {missShot}.") --- */
+  missShot: ['the shot goes wide', 'the round slaps into the mud behind it', 'splinters fly from a post a foot to the left', 'the shot whines off into the dark', 'it lurches aside at the last instant', 'the round tugs at its rags and nothing more', 'water spouts where it stood a breath ago', 'the shot sails high into the trees'],
+  missArrow: ['the shaft hisses past its head', 'the shaft buries itself in a post behind it', 'the shot goes wide into the reeds', 'it twitches aside and the shaft skips off into the mud', 'the fletching brushes it, nothing more', 'the shaft flies high and is lost in the dark'],
+  missMelee: ['it twists out of the way', 'your swing cuts empty air', 'the blow glances off and does nothing', 'you overreach and nearly lose your footing', 'it jerks back just out of reach', 'the blow thuds into a post instead', 'your footing goes in the mud and the swing goes with it'],
+
+  /* --- combat: how a creature takes a wound, by how much it has left --- */
+  woundLight: ['It barely seems to notice.', 'It jerks, and keeps coming.', 'Black blood spatters. It doesn\'t slow.', 'It shrugs it off like rain.', 'The hit rocks it. It doesn\'t seem to care.', 'It grunts — the only sign it felt anything.', 'Rags and flesh tear. It hardly breaks stride.'],
+  woundMid: ['It staggers, black blood pumping from the wound.', 'Something important comes loose inside it.', 'It reels, then rights itself.', 'It stumbles and nearly goes down.', 'A wet sound, and it lists to one side.', 'It howls — or something like a howl.', 'Black fluid sheets down its front.'],
+  woundHeavy: ['It\'s barely holding together.', 'It sways like a man on a gallows.', 'One more good one.', 'It\'s running on spite now.', 'It shudders, leaking from too many places.', 'It barely keeps its feet.', 'Whatever holds it together is nearly spent.'],
+
+  /* --- combat: creatures attacking you ("misses — {foeMiss}." / "hits for 5 — {foeHit}.") --- */
+  foeMiss: ['you twist aside', 'you duck under it', 'it catches only your coat', 'you get an arm up in time', 'it swipes empty air', 'you stumble clear', 'it overreaches in the mud'],
+  foeHit: ['it tears into you', 'pain lights you up', 'the blow knocks the wind out of you', 'you feel something give', 'it opens you up', 'you taste blood', 'you hear yourself cry out'],
+
+  /* --- combat: how it ends --- */
+  fightOver: [
+    'The bayou goes quiet again, the way it does — as if nothing happened here.',
+    'The frogs start up again, one by one.',
+    'Smoke and stink hang over the bodies, then drift off over the water.',
+    'Your ears ring. Your hands won\'t stop shaking for a while.',
+    'Nothing else moves. You stand there a long moment to be sure.',
+    'The {dark} water laps at the bodies. Nothing else stirs.',
+  ],
+  fled: [
+    'You put distance and dark between you and them, and keep going until your lungs give out.',
+    'You run until the sounds behind you are just the bayou again.',
+    'You crash through the reeds and don\'t look back until your legs give out.',
+    'You break and run. For a long while you can still hear them looking.',
+  ],
+
+  /* --- combat: death lines, by creature key --- */
+  kill: {
+    normal: ['It folds up and goes down in the mud, and stays there.', 'It drops like a sack of wet grain.', 'Its knees go, then the rest of it. It does not get up.', 'It topples backward into the reeds and lies still.', 'It sags, breathes out something foul, and is finally dead.', 'It hits the ground face-first. Whatever was left of the man is gone now.'],
+    rotted: ['It comes apart like wet paper.', 'It splits along old seams and slumps into a heap.', 'It collapses into a puddle of rags and soft bone.', 'Whatever holds it together lets go all at once.', 'It sloughs to the ground with a sound like a dropped bucket.'],
+    looter: ['It drops in a clatter of stolen gear.', 'It goes down, and a dozen stolen trinkets scatter in the mud.', 'It falls on its hoard and lies there, still clutching a strap.', 'It crumples, pockets spilling coins that were never its own.'],
+    stalker: ['It hits the reeds and is still.', 'It drops mid-stride and slides to a stop in the mud.', 'It folds over low, the way it moved, and doesn\'t move again.', 'It goes down without a sound, the way it hunted.'],
+    hellhound: ['The hound yelps once, high and almost like a dog again, and is still.', 'The hound crashes down, legs kicking, then nothing.', 'The hound whines, curls in on itself, and goes quiet.', 'The hound tumbles end over end and lies broken in the mud.'],
+    hive: ['The Hive collapses in on her nest. The humming stops.', 'She folds over the nest like a mother over a child. The wasps fall silent.', 'The nest cracks open as she falls, and the humming dies with her.'],
+    immolator: ['The fire in it gutters and goes out. What\'s left is charcoal.', 'It falls, and the embers in it fade from orange to grey.', 'It drops in a burst of sparks and lies there, smoking.'],
+    meathead: ['The Meathead topples like a felled oak and the ground shakes.', 'The Meathead sways, then crashes down; the leeches at its neck go still.', 'The Meathead sinks to its knees, then slowly, heavily falls.'],
+    leech: ['The leech bursts.', 'The leech pops like a blister.', 'The leech splits and curls up in the mud.', 'The leech goes limp and leaks black.'],
+    waterdevil: ['The worms come apart into a thousand white threads and sink.', 'The white shape unravels and sinks into the dark water.', 'The worms scatter, writhing, and the water goes still.'],
+    bileweaver: ['Its legs curl up under it.', 'It drops off the wall and lands on its back, legs twitching.', 'Its shell cracks, and the green mist at its mouth thins to nothing.'],
+    sineater: ['It collapses into mud and blackened roots.'],
+    butcher: ['The Butcher goes down on its knees, then its face. The hook clatters free. Something leaves the place — you feel it go.'],
+    armored: ['The Armored folds at the knees and falls, plates cracking.', 'The Armored topples like a statue, plates shattering as it lands.', 'The Armored goes down heavily, fungus puffing from the seams.'],
+  },
+};
+
 /* Common locations (§8.5): each has description lines, areas, hazards, and a prize. */
 H.LOCS = {
   shack: {
@@ -1168,18 +1292,23 @@ H.availBars = (h) => Math.max(0, h.bars - H.infPen(h));
 H.maxHp = (h) => Math.max(0, H.availBars(h) * 10 - h.fireBurn);
 
 /* ---------- HP and bars (§3.3) ---------- */
-/* Damage empties the top bar first; a bar that reaches 0 is burned out. The last bar
-   never burns: hitting 0 downs the hunter instead (§3.4). */
+/* Damage drains the top bar first. A bar that empties is only empty: any healing refills it.
+   Only fire burns: a bar that fire damage empties burns out, and maximum health stays down
+   until a doctor or a remedy restores it. The last bar never burns: hitting 0 downs the
+   hunter instead (§3.4). */
 H.hurt = (n, type) => {
   const h = H.S.hunter;
   const before = h.hp;
   h.hp = Math.max(0, h.hp - n);
   const out = [];
-  let avail = H.availBars(h);
-  while (avail > 1 && h.hp <= (avail - 1) * 10) {
-    h.bars--;
-    avail--;
-    out.push('bar');
+  if (type === 'fire') {
+    // bars whose floor this hit crossed, never counting the bottom bar
+    const emptied = Math.max(0, Math.ceil(before / 10) - Math.max(1, Math.ceil(h.hp / 10)));
+    const burn = Math.min(emptied, h.bars - 1);
+    if (burn > 0) {
+      h.bars -= burn;
+      out.push('bar' + burn);
+    }
   }
   if (type === 'fire' && H.S.mission) {
     H.S.mission.fireTaken += n;
@@ -1191,8 +1320,12 @@ H.hurt = (n, type) => {
     }
   }
   if (h.hp > H.maxHp(h)) h.hp = H.maxHp(h);
-  if (out.includes('bar'))
-    H.log(`<span class="bad">A bar burns out.</span> Your maximum health drops to <b>${H.maxHp(h)}</b> until a doctor or a remedy restores it. ${H.ref('3.3')}`, 'sys');
+  const b = out.find((x) => x.startsWith('bar'));
+  if (b) {
+    const nb = +b.slice(3),
+      it = nb === 1 ? 'it' : 'them';
+    H.log(`<span class="bad">The fire burns ${nb === 1 ? 'a bar' : H.num(nb) + ' bars'} away.</span> Healing won't bring ${it} back: your maximum health is <b>${H.maxHp(h)}</b> until a doctor or a remedy restores ${it}. ${H.ref('3.3')}`, 'sys');
+  }
   const f = out.find((x) => x.startsWith('fire'));
   if (f) H.log(`<span class="bad">The fire takes something that won't heal until this job is done</span> — ${f.slice(4)} HP of maximum burned. ${H.ref('3.6')}`, 'sys');
   H.sfx && before > h.hp && H.sfx('hurt');
@@ -2586,9 +2719,7 @@ H.check = (cfg) => {
   if (cfg.mods) mods = mods.concat(cfg.mods);
   const info = H.dcInfo(cfg.dc);
   const box = H.$('#choices');
-  /* Spend the Story Point (if any) and roll the d20; resolve() applies it afterwards,
-     so the panel can show the real die before the scene moves on. */
-  const rollDie = (useSP) => {
+  const doRoll = (useSP) => {
     H.audioInit();
     let adv = !!cfg.adv;
     if (useSP && h.sp > 0 && !adv) {
@@ -2597,10 +2728,7 @@ H.check = (cfg) => {
       h.armedSP = false;
       H.log('<span class="sp">✦ Story Point spent for advantage.</span>', 'sys');
     }
-    return H.d20(adv, cfg.dis);
-  };
-  const doRoll = (useSP) => resolve(rollDie(useSP));
-  const resolve = (r) => {
+    const r = H.d20(adv, cfg.dis);
     const total = r.die + H.modsSum(mods);
     const success = total >= cfg.dc;
     H.sfx('dice');
@@ -2640,35 +2768,18 @@ H.check = (cfg) => {
   btn.addEventListener('click', () => {
     btn.disabled = true;
     const sp = !!(H.$('#useSP') && H.$('#useSP').checked);
-    if (H.$('#useSP')) H.$('#useSP').disabled = true;
-    const cancel = panel.querySelector('.cancelbtn');
-    if (cancel) cancel.remove(); // the bones are thrown — no backing out mid-roll
-    const r = rollDie(sp);
-    H.ui.tumble(panel, r, () => resolve(r));
+    const face = H.el('div', { class: 'die-anim' });
+    panel.appendChild(face);
+    let k = 0;
+    const iv = setInterval(() => {
+      face.textContent = String(H.d(20));
+      if (++k > 7) {
+        clearInterval(iv);
+        doRoll(sp);
+      }
+    }, 45);
   });
   btn.focus();
-};
-
-/* The visible die: tumbles, slowing as it settles, lands on the real result r (from H.d20),
-   holds it for 2 seconds, then calls done(). */
-H.ui.tumble = (host, r, done) => {
-  const face = H.el('div', { class: 'die-anim' });
-  host.appendChild(face);
-  const show = (v) => (face.textContent = r.dice.length > 1 ? `${v[0]} · ${v[1]}` : String(v[0]));
-  const delays = [40, 40, 45, 50, 55, 65, 75, 90, 110, 135, 165, 200];
-  let k = 0;
-  const step = () => {
-    if (k < delays.length) {
-      show(r.dice.map(() => H.d(20)));
-      setTimeout(step, delays[k++]);
-      return;
-    }
-    show(r.dice);
-    face.classList.add('landed');
-    if (r.dice.length > 1) face.appendChild(H.el('div', { class: 'die-keep', text: `${r.mode === 'adv' ? 'advantage' : 'disadvantage'} — keep ${r.die}` }));
-    setTimeout(done, 2000);
-  };
-  step();
 };
 
 /* A hidden roll the DM makes (§1.5) — logged quietly, no number shown. */
@@ -3052,7 +3163,8 @@ H.ui.help = () => {
     <h3>Story Points ✦</h3>
     <p>Earned for doing something cool, clever or outrageous. Hold up to three. Spend one for advantage on any d20 roll — tick the box on the dice panel, or arm it on your sheet before an attack.</p>
     <h3>Health</h3>
-    <p>50 HP in five bars of 10. <b>A bar that empties burns out</b> and lowers your maximum until a doctor, Carron Oil with a long rest, or an Antiseptic Kit restores it. Natural recovery only refills the bar you're in. A Medkit is the most valuable thing you own.</p>
+    <p>50 HP in five bars of 10. Damage drains the top bar first. <b>An emptied bar is only empty</b>: Medkits, First Aid Kits and rest fill it back up. Natural recovery over time only refills the bar you're in. A Medkit is the most valuable thing you own.</p>
+    <p><b>Only fire burns a bar.</b> If fire damage empties a bar, it burns away (marked ✕), and your maximum health is 10 for each bar that isn't burned. Healing can't touch a burned bar: you need a doctor, Carron Oil with a long rest, or an Antiseptic Kit. So at 30 HP with nothing burned, you can heal back to 50. At 30 HP with one bar burned, you can heal to 40, and the last 10 waits for the doctor.</p>
     <p>Grunt bites and scratches must be cleaned (liquor, a First Aid Kit, a Medkit charge) inside a window of hours, or the wound sets into an infection.</p>
     <h3>Fighting</h3>
     <p>Each turn: <b>Movement</b> (9 m — or spend it all on Aim, Fast Reload, Power Shot or Stand Your Ground), one <b>Action</b>, one <b>Bonus Action</b>. Prepared responses must be declared before the trigger. Shots past a weapon's effective range lose accuracy and punch fast. Gunfire draws more grunts; silent weapons don't. Fire answers a great many questions.</p>
@@ -3248,9 +3360,9 @@ H.scenes.combat = {
 /* ---------------------------------------------------------------------
    Initiative and the round loop
    --------------------------------------------------------------------- */
-/* Spend an armed Story Point (if any) and roll the hunter's initiative die. */
-H.CB.initDie = (useSP) => {
-  const h = H.S.hunter;
+H.CB.rollInit = (useSP) => {
+  const c = H.S.combat,
+    h = H.S.hunter;
   let adv = false;
   if ((useSP || h.armedSP) && h.sp > 0) {
     h.sp--;
@@ -3258,13 +3370,7 @@ H.CB.initDie = (useSP) => {
     adv = true;
     H.log('<span class="sp">✦ Story Point spent for advantage.</span>', 'sys');
   }
-  return H.d20(adv, false);
-};
-/* r: a die already rolled by initDie (so the panel can show it first); rolled here if omitted. */
-H.CB.rollInit = (useSP, r) => {
-  const c = H.S.combat,
-    h = H.S.hunter;
-  if (!r) r = H.CB.initDie(useSP);
+  const r = H.d20(adv, false);
   const dm = H.am(h, 'DEX');
   c.hInit = r.die + dm;
   H.sfx('dice');
@@ -3416,7 +3522,7 @@ H.CB.endOfRound = () => {
       const e = H.makeFoe(a.key, { dist: a.dist, state: 'aggressive' });
       e.init = H.d(20) + (H.CREATURES[a.key].init || 0);
       c.enemies.push(e);
-      H.log(`<span class="bad">More are coming.</span> ${H.cap(e.look)} lurches out of the dark, ${Math.round(e.dist)} m off, drawn by the noise. ${H.ref('4.8')}`, 'combat');
+      H.log(`<span class="bad">More are coming.</span> ${H.cap(e.look)} ${H.w('emerge')}, ${Math.round(e.dist)} m off, drawn by the noise. ${H.ref('4.8')}`, 'combat');
       H.sfx('growl');
     }
   }
@@ -3544,11 +3650,11 @@ H.CB.finish = (how) => {
   S.combat = null;
   H.ui.divider();
   if (how === 'win') {
-    H.log(`<span class="good">It's over.</span> The bayou goes quiet again, the way it does — as if nothing happened here.`, 'sys');
+    H.log(`<span class="good">It's over.</span> ${H.fill(H.w('fightOver'))}`, 'sys');
     if (kills.length >= 4) H.awardSP(`clearing ${kills.length} of them in one fight`);
     S.lastFight = { bodies: bodies.map((b) => ({ uid: b.uid, key: b.key, loot: b.loot, killedType: b.killedType, looted: false })), trophies, kills, hadSinEater };
   } else if (how === 'flee') {
-    H.log('You put distance and dark between you and them, and keep going until your lungs give out.', 'sys');
+    H.log(H.w('fled'), 'sys');
     S.lastFight = { bodies: [], trophies: [], kills, fled: true, survivors };
   } else if (how === 'wake') {
     h.hp = 1;
@@ -3616,7 +3722,7 @@ H.CB.move = (dir, m) => {
     }
     for (const f of c.fires) f.pos -= m;
     for (const d of c.dyn) d.pos -= m;
-    H.log(`You advance ${m} m${tgt ? ` toward the ${H.foeLabel(tgt).toLowerCase()}` : ''}.`, 'move');
+    H.log(`You ${H.w('advance')} ${m} m${tgt ? ` toward the ${H.foeLabel(tgt).toLowerCase()}` : ''}.`, 'move');
   } else {
     // falling back: anything in reach gets a free swing unless you Disengaged (§4.3)
     const adj = H.alive().filter((e) => e.dist <= (H.foeC(e).reach || 2) && !e.cond.staggered && !e.cond.stunned && !e.cond.prone && !H.foeC(e).waterdevil && e.state === 'aggressive');
@@ -3634,7 +3740,7 @@ H.CB.move = (dir, m) => {
     }
     if (c.inDoor) c.inDoor = false;
     H.CB.shiftAll(m);
-    H.log(`You fall back ${m} m.`, 'move');
+    H.log(`You ${H.w('retreat')} ${m} m.`, 'move');
   }
   t.move -= m;
   t.moved += m;
@@ -3843,7 +3949,8 @@ H.CB.attack = (e, mode, extra) => {
   const verb = mode === 'stock' ? W.melee : mode === 'thrust' ? 'Thrust' : mode === 'power' ? 'Power Shot' : W.kind === 'melee' ? 'Slash' : W.name;
   let line = `<span class="roll">${H.esc(verb)} → ${H.esc(H.foeLabel(e))} (${Math.round(e.dist)} m): 1d20 (${H.diceText(r)})${H.modsText(mods)} = <b>${total}</b></span> — `;
   if (!hit) {
-    line += nat1 ? '<span class="bad">a natural 1. Clean miss.</span>' : '<span class="bad">miss.</span>';
+    const missWords = !ranged ? 'missMelee' : W.kind === 'bow' || W.kind === 'xbow' ? 'missArrow' : 'missShot';
+    line += nat1 ? '<span class="bad">a natural 1. Clean miss.</span>' : `<span class="bad">miss</span> — ${H.w(missWords)}.`;
     H.log(line + ' ' + H.ref(C.acv ? '4.4a' : '4.4'), 'attack');
     H.CB.afterShotNoise(ranged && !silent, W, e, false);
     if (stealthy && !silent) H.CB.reveal();
@@ -4027,12 +4134,7 @@ H.CB.applyDamage = (e, dmg, dtype, info) => {
     H.CB.kill(e, dtype);
   } else {
     const f = e.hp / e.max;
-    const ln =
-      f > 0.66
-        ? H.pick(['It barely seems to notice.', 'It jerks, and keeps coming.', 'Black blood spatters. It doesn\'t slow.'])
-        : f > 0.33
-        ? H.pick(['It staggers, black blood pumping from the wound.', 'Something important comes loose inside it.', 'It reels, then rights itself.'])
-        : H.pick(['It\'s barely holding together.', 'It sways like a man on a gallows.', 'One more good one.']);
+    const ln = H.w(f > 0.66 ? 'woundLight' : f > 0.33 ? 'woundMid' : 'woundHeavy');
     H.log(`<span class="dim">${ln}</span>`, 'combat');
   }
 };
@@ -4048,23 +4150,7 @@ H.CB.kill = (e, dtype) => {
   h.stats.kills++;
   h.stats.killList[e.key] = (h.stats.killList[e.key] || 0) + 1;
   const C = H.CREATURES[e.key];
-  const deaths = {
-    normal: 'It folds up and goes down in the mud, and stays there.',
-    rotted: 'It comes apart like wet paper.',
-    looter: 'It drops in a clatter of stolen gear.',
-    stalker: 'It hits the reeds and is still.',
-    hellhound: 'The hound yelps once, high and almost like a dog again, and is still.',
-    hive: 'The Hive collapses in on her nest. The humming stops.',
-    immolator: 'The fire in it gutters and goes out. What\'s left is charcoal.',
-    meathead: 'The Meathead topples like a felled oak and the ground shakes.',
-    leech: 'The leech bursts.',
-    waterdevil: 'The worms come apart into a thousand white threads and sink.',
-    bileweaver: 'Its legs curl up under it.',
-    sineater: 'It collapses into mud and blackened roots.',
-    butcher: 'The Butcher goes down on its knees, then its face. The hook clatters free. Something leaves the place — you feel it go.',
-    armored: 'The Armored folds at the knees and falls, plates cracking.',
-  };
-  H.log(`<span class="kill">✝ ${deaths[e.key] || 'It dies.'}</span>`, 'combat');
+  H.log(`<span class="kill">✝ ${H.w('kill.' + e.key) || 'It dies.'}</span>`, 'combat');
   if (C.boss) H.awardSP(`bringing down ${C.name}`);
   // a Stalker pack loses its Leader → they become Normal Grunts in every respect (§6.1)
   if (C.stalker && e.leader && e.stalker) {
@@ -4425,7 +4511,7 @@ H.CB.foeAttack = (e, o) => {
   const hit = r.die !== 1 && (r.die === 20 || tot >= ac);
   const nm = H.foeLabel(e);
   if (!hit) {
-    H.log(`${H.cap(e.look.split(',')[0])} — <i>${A.n}</i>: ${tot} vs AC ${ac}${mods.length ? ' (' + mods.join(', ') + ')' : ''}${r.dice.length > 1 ? ` [${r.mode}]` : ''} — <span class="good">misses.</span>${blockTxt}`, 'enemy');
+    H.log(`${H.cap(e.look.split(',')[0])} — <i>${A.n}</i>: ${tot} vs AC ${ac}${mods.length ? ' (' + mods.join(', ') + ')' : ''}${r.dice.length > 1 ? ` [${r.mode}]` : ''} — <span class="good">misses — ${H.w('foeMiss')}.</span>${blockTxt}`, 'enemy');
     return;
   }
   let dmgR = H.roll(A.dmg);
@@ -4438,7 +4524,7 @@ H.CB.foeAttack = (e, o) => {
     if (C.butcher && e.hp < 45) fire += H.d(6);
   }
   H.sfx(e.key === 'hellhound' ? 'bark' : 'hurt');
-  H.log(`${H.cap(e.look.split(',')[0])} — <i>${A.n}</i>: ${tot} vs AC ${ac}${mods.length ? ' (' + mods.join(', ') + ')' : ''}${r.die === 20 ? ' — <b>natural 20</b>' : ''} — <span class="bad">hits for ${dmg}${fire ? ` + ${fire} fire` : ''}.</span>${blockTxt} ${H.ref('6.1')}`, 'enemy');
+  H.log(`${H.cap(e.look.split(',')[0])} — <i>${A.n}</i>: ${tot} vs AC ${ac}${mods.length ? ' (' + mods.join(', ') + ')' : ''}${r.die === 20 ? ' — <b>natural 20</b>' : ''} — <span class="bad">hits for ${dmg}${fire ? ` + ${fire} fire` : ''} — ${H.w('foeHit')}.</span>${blockTxt} ${H.ref('6.1')}`, 'enemy');
   let down = H.hurt(dmg, A.type);
   if (fire && !down) down = H.hurt(fire, 'fire');
   if (down) return H.CB.hunterDown(`killed by ${C.plural === 'Armored' ? 'an Armored' : C.name === 'The Butcher' ? 'the Butcher' : 'a ' + C.name}`);
@@ -4641,23 +4727,13 @@ H.combatUI = (box) => {
   if (c.phase === 'init') {
     wrap.appendChild(H.el('div', { class: 'cmsg', html: 'Roll for initiative: <b>1d20 + DEX</b>.' }));
     const b = H.el('button', { class: 'rollbtn' }, '🎲 Roll initiative');
-    const go = (r) => {
+    b.addEventListener('click', () => {
+      H.audioInit();
       try {
-        H.CB.rollInit(false, r);
+        H.CB.rollInit(false);
       } catch (err) {
         H.ui.crash(err);
       }
-    };
-    b.addEventListener('click', () => {
-      H.audioInit();
-      if (H.settings.fast) return go();
-      b.disabled = true;
-      H.ui.busy = 'roll'; // keep re-renders from wiping the die mid-roll
-      const r = H.CB.initDie(false);
-      H.ui.tumble(wrap, r, () => {
-        H.ui.busy = null;
-        go(r);
-      });
     });
     wrap.appendChild(b);
     box.appendChild(wrap);
@@ -5365,7 +5441,7 @@ H.scenes.travel_out = {
     H.log(`You set out for ${H.esc(job.loc.name)}. ${H.weather().line}`);
     H.advance(job.travel);
     S.where = 'field';
-    H.log(`${H.cap(H.num(job.travel))} hours on foot and by borrowed pirogue, through cane and cypress and black water. It's ${H.tod().name} when you get close.`);
+    H.log(`${H.cap(H.num(job.travel))} hours ${H.w('travelBy')}, through ${H.w('travelThrough')}. It's ${H.tod().name} when you get close.`);
     // road events
     const r = H.d(10);
     if (r <= 2) {
@@ -5476,7 +5552,7 @@ H.scenes.area = {
     if (!a.visited) {
       a.visited = true;
       H.ui.divider();
-      H.log(`<b>${H.cap(a.n)}.</b> ${a.d}`);
+      H.log(`<b>${H.cap(a.n)}.</b> ${a.d}${H.chance(0.5) ? ' ' + H.fill(H.w('ambient')) : ''}`);
       H.advance(0);
     }
     // hazard
@@ -5528,7 +5604,7 @@ H.scenes.area = {
               m.objDone = true;
               m.goods = true;
               H.addItem('cargo', 1, { name: H.cap(job.extra.cargo) });
-              H.log(`There — under ${H.pick(['a fallen beam', 'a tarpaulin gone green', 'a pile of rotted sacking', 'the floorboards'])}: ${H.esc(job.extra.cargo)}. You have it.`);
+              H.log(`There — under ${H.w('hidingPlace')}: ${H.esc(job.extra.cargo)}. You have it.`);
               H.sfx('coin');
             } else {
               H.log('An hour of turning over rot and finding nothing.');
@@ -5690,9 +5766,9 @@ H.scenes.encounter = {
         if (g.key === 'looter') {
           g.loot.forEach((l, i) => parts.push(`${i ? 'Another' : 'A'} looter grunt is ${H.pick(H.T.looterRoutines)} — it carries ${l.look}.`));
         } else if (g.n > 1) {
-          parts.push(`${H.cap(H.num(g.n))} ${Cg.plural.toLowerCase()}${g.state === 'passive' ? `: one ${H.pick(H.T.routines)}, another ${H.pick(H.T.routines)}` : ', restless, heads turning'}.`);
+          parts.push(`${H.cap(H.num(g.n))} ${Cg.plural.toLowerCase()}${g.state === 'passive' ? `: one ${H.pick(H.T.routines)}, another ${H.pick(H.T.routines)}` : ', ' + H.w('restlessMany')}.`);
         } else {
-          parts.push(`${H.cap(H.pick(Cg.looks))}${g.state === 'passive' ? ', ' + H.pick(H.T.routines) : ', restless'}.`);
+          parts.push(`${H.cap(H.pick(Cg.looks))}${g.state === 'passive' ? ', ' + H.pick(H.T.routines) : ', ' + H.w('restless')}.`);
         }
       }
       txt = `${parts.join(' ')} ${enc[0].state === 'passive' ? 'They haven\'t noticed you. Grunts aren\'t hostile on sight — not until they are.' : 'Something has stirred them up.'}`;
